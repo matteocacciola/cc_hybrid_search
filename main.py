@@ -26,14 +26,16 @@ from qdrant_client.http.models import (
 # global variables
 hybrid_collection_name = "declarative_hybrid"
 k = 5
+k_prefetched = 10
 threshold = 0.5
 
 
 @hook(priority=99)
 def before_cat_reads_message(user_message_json, cat):
-    global k, threshold
+    global k, threshold, k_prefetched
     settings = cat.mad_hatter.get_plugin().load_settings()
     k = settings["number_of_hybrid_items"]
+    k_prefetched = settings["number_of_prefetched_items"]
     threshold = settings["hybrid_threshold"]
     return user_message_json
 
@@ -138,7 +140,7 @@ def populate_hybrid_collection(stored_points, cat):
     log.info(f"Added {len(hybrid_points)} points to hybrid collection")
 
 
-def search_hybrid_collection(query, k, threshold, metadata, cat):
+def search_hybrid_collection(query, k, k_prefetched, threshold, metadata, cat):
     global hybrid_collection_name
     client = cat.memory.vectors.vector_db
     dense_embedding = cat.embedder.embed_query(query)
@@ -150,10 +152,12 @@ def search_hybrid_collection(query, k, threshold, metadata, cat):
             models.Prefetch(
                 query=dense_embedding,
                 using="dense",
+                limit=k_prefetched,
             ),
             models.Prefetch(
                 query=models.Document(text=query, model="Qdrant/bm25"),
                 using="sparse",
+                limit=k_prefetched,
             ),
         ],
         with_payload=True,
@@ -213,7 +217,7 @@ def before_cat_recalls_declarative_memories(
 
 @hook(priority=99)
 def after_cat_recalls_memories(cat) -> None:
-    global k, threshold
+    global k, k_prefetched, threshold
     metadata = {}
     ## if there are tags in the user message, use them as metadata filter
     if (
@@ -222,7 +226,7 @@ def after_cat_recalls_memories(cat) -> None:
     ):
         metadata = cat.working_memory.user_message_json.tags
     memories = search_hybrid_collection(
-        cat.working_memory.recall_query, k, threshold, metadata, cat
+        cat.working_memory.recall_query, k, k_prefetched, threshold, metadata, cat
     )
     # convert Qdrant points to langchain.Document
     langchain_documents_from_points = []

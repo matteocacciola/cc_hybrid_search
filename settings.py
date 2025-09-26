@@ -5,6 +5,7 @@ from enum import Enum
 
 # Plugin settings
 class PluginSettings(BaseModel):
+    number_of_prefetched_items: int = 10
     number_of_hybrid_items: int = 5
     hybrid_threshold: float = 0.5
 
