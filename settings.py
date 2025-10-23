@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 from cat.mad_hatter.decorators import plugin
-from enum import Enum
 
 
 # Plugin settings

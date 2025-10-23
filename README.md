@@ -5,8 +5,8 @@
 ## ✨ Key Features
 
 - **⭐ No data loss**: The plugin create an additional collection (declarative_hybrid) that work in parallel with orginal declarative collection. Enabling / disabling plugin not cause any data loss on the orginal collection.
-- **🌍 Multilingual**: Use Qdrant/bm25 for sparse emebddings, that support more languages (not only english)
-- **⚙️ Configurable settings**: Set the number (k) of items and threshold to perform data retrivial
+- **🌍 Multilingual**: Use Qdrant/bm25 for sparse embeddings, that support more languages (not only english)
+- **⚙️ Configurable settings**: Set the number (k) of items and threshold to perform data retrieval
 
 ## 🚀 Quick Start
 

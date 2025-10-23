@@ -3,7 +3,7 @@ from cat.mad_hatter.decorators import hook
 from cat.log import log
 from typing import Dict
 import time
-from langchain.docstore.document import Document as LangChainDocument
+from langchain_core.documents import Document as LangChainDocument
 
 from cat.memory.utils import Document
 from cat.utils import run_sync_or_async
