@@ -1,11 +1,11 @@
+from cat import hook
 from cat.looking_glass.stray_cat import StrayCat
-from cat.mad_hatter.decorators import hook
 from cat.log import log
 from typing import Dict
 import time
 from langchain_core.documents import Document as LangChainDocument
 
-from cat.memory.utils import Document
+from cat.services.memory.utils import Document
 from cat.utils import run_sync_or_async
 
 # global variables
