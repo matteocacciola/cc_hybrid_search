@@ -124,7 +124,6 @@ def before_cat_recalls_memories(
 
 @hook(priority=99)
 def after_cat_recalls_memories(cat) -> None:
-    global k, k_prefetched, threshold
     metadata = {}
     ## if there are tags in the user message, use them as metadata filter
     if (
