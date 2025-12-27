@@ -1,6 +1,4 @@
-from cat import hook
-from cat.looking_glass.stray_cat import StrayCat
-from cat.log import log
+from cat import hook, StrayCat, log
 from typing import Dict
 import time
 from langchain_core.documents import Document as LangChainDocument
@@ -16,20 +14,20 @@ threshold = 0.5
 
 
 @hook(priority=99)
-def before_cat_reads_message(user_message_json, cat):
+def before_cat_reads_message(user_message, cat):
     global k, threshold, k_prefetched
     settings = cat.mad_hatter.get_plugin().load_settings()
     k = settings["number_of_hybrid_items"]
     k_prefetched = settings["number_of_prefetched_items"]
     threshold = settings["hybrid_threshold"]
-    return user_message_json
+    return user_message
 
 
 @hook(priority=99)
 def agent_fast_reply(fast_reply: Dict, cat: StrayCat) -> Dict:
     global hybrid_collection_name
 
-    user_message: str = cat.working_memory.user_message_json.text
+    user_message: str = cat.working_memory.user_message.text
     if not user_message.startswith("@hybrid"):
         return fast_reply
 
@@ -97,8 +95,8 @@ async def populate_hybrid_collection(stored_points, cat):
     log.info(f"Added {len(points_ids)} points to hybrid collection")
 
 
-async def search_hybrid_collection(query, k, k_prefetched, threshold, metadata, cat):
-    global hybrid_collection_name
+async def search_hybrid_collection(query, metadata, cat):
+    global hybrid_collection_name, k_prefetched, threshold, k
     client = cat.vector_memory_handler
     dense_embedding = cat.embedder.embed_query(query)
     search_result = await client.search_prefetched(
@@ -130,16 +128,13 @@ def after_cat_recalls_memories(cat) -> None:
     metadata = {}
     ## if there are tags in the user message, use them as metadata filter
     if (
-        hasattr(cat.working_memory.user_message_json, "tags")
-        and cat.working_memory.user_message_json.tags
+        hasattr(cat.working_memory.user_message, "tags")
+        and cat.working_memory.user_message.tags
     ):
-        metadata = cat.working_memory.user_message_json.tags
+        metadata = cat.working_memory.user_message.tags
     memories = run_sync_or_async(
         search_hybrid_collection,
         cat.working_memory.recall_query,
-        k,
-        k_prefetched,
-        threshold,
         metadata,
         cat,
     )
