@@ -1,9 +1,10 @@
-from cat import hook, StrayCat, log
 from typing import Dict
+
+from cat import hook, StrayCat, log, UserMessage, AgentOutput
 import time
 from langchain_core.documents import Document as LangChainDocument
 
-from cat.services.memory.utils import Document
+from cat.services.memory.utils import Document, RecallSettings
 from cat.utils import run_sync_or_async
 
 # global variables
@@ -14,7 +15,7 @@ threshold = 0.5
 
 
 @hook(priority=99)
-def before_cat_reads_message(user_message, cat):
+def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
     global k, threshold, k_prefetched
     settings = cat.mad_hatter.get_plugin().load_settings()
     k = settings["number_of_hybrid_items"]
@@ -24,7 +25,7 @@ def before_cat_reads_message(user_message, cat):
 
 
 @hook(priority=99)
-def agent_fast_reply(fast_reply: Dict, cat: StrayCat) -> Dict:
+def agent_fast_reply(fast_reply: AgentOutput, cat: StrayCat) -> AgentOutput:
     global hybrid_collection_name
 
     user_message: str = cat.working_memory.user_message.text
@@ -35,7 +36,7 @@ def agent_fast_reply(fast_reply: Dict, cat: StrayCat) -> Dict:
         run_sync_or_async(delete_hybrid_collection_if_exists, cat, hybrid_collection_name)
         run_sync_or_async(create_hybrid_collection_if_not_exists, cat, hybrid_collection_name)
 
-        fast_reply["output"] = "Hybrid collection initialized."
+        fast_reply.output = "Hybrid collection initialized."
     elif user_message == "@hybrid migrate":
         points = run_sync_or_async(get_declarative_points, cat)
         run_sync_or_async(populate_hybrid_collection, points, cat)
@@ -43,7 +44,7 @@ def agent_fast_reply(fast_reply: Dict, cat: StrayCat) -> Dict:
         # add 5-second wait time to ensure data is committed
         time.sleep(5)
 
-        fast_reply["output"] = "Hybrid collection populted."
+        fast_reply.output = "Hybrid collection populted."
 
     return fast_reply
 
@@ -95,7 +96,7 @@ async def populate_hybrid_collection(stored_points, cat):
     log.info(f"Added {len(points_ids)} points to hybrid collection")
 
 
-async def search_hybrid_collection(query, metadata, cat):
+async def search_hybrid_collection(query: str, metadata: Dict, cat):
     global hybrid_collection_name, k_prefetched, threshold, k
     client = cat.vector_memory_handler
     dense_embedding = cat.embedder.embed_query(query)
@@ -114,11 +115,11 @@ async def search_hybrid_collection(query, metadata, cat):
 
 @hook(priority=99)
 def before_cat_recalls_memories(
-    declarative_recall_config: dict, cat
-) -> dict:
+    declarative_recall_config: RecallSettings, cat
+) -> RecallSettings:
     global k, threshold
-    declarative_recall_config["k"] = k
-    declarative_recall_config["threshold"] = threshold
+    declarative_recall_config.k = k
+    declarative_recall_config.threshold = threshold
     return declarative_recall_config
 
 
