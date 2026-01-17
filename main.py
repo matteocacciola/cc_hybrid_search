@@ -1,10 +1,9 @@
-from typing import Dict
-
-from cat import hook, StrayCat, log, UserMessage, AgenticWorkflowOutput, RecallSettings
+from typing import Dict, List
 import time
 from langchain_core.documents import Document as LangChainDocument
 
-from cat.services.memory.models import Document
+from cat import hook, StrayCat, log, UserMessage, AgenticWorkflowOutput, RecallSettings
+from cat.services.memory.models import Document, PointStruct
 from cat.utils import run_sync_or_async
 
 # global variables
@@ -25,28 +24,28 @@ def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
 
 
 @hook(priority=99)
-def agent_fast_reply(fast_reply: AgenticWorkflowOutput, cat: StrayCat) -> AgenticWorkflowOutput:
+def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
     global hybrid_collection_name
 
     user_message: str = cat.working_memory.user_message.text
     if not user_message.startswith("@hybrid"):
-        return fast_reply
+        return None
 
     if user_message == "@hybrid init":
         run_sync_or_async(delete_hybrid_collection_if_exists, cat, hybrid_collection_name)
         run_sync_or_async(create_hybrid_collection_if_not_exists, cat, hybrid_collection_name)
 
-        fast_reply.output = "Hybrid collection initialized."
-    elif user_message == "@hybrid migrate":
+        return AgenticWorkflowOutput(output="Hybrid collection initialized.")
+    if user_message == "@hybrid migrate":
         points = run_sync_or_async(get_declarative_points, cat)
         run_sync_or_async(populate_hybrid_collection, points, cat)
 
         # add 5-second wait time to ensure data is committed
         time.sleep(5)
 
-        fast_reply.output = "Hybrid collection populted."
+        return AgenticWorkflowOutput(output="Hybrid collection populted.")
 
-    return fast_reply
+    return None
 
 
 async def get_declarative_points(cat):
@@ -72,7 +71,7 @@ async def delete_hybrid_collection_if_exists(cat, collection_name):
 
 
 @hook
-def after_rabbithole_stored_documents(source, stored_points, cat):
+def after_rabbithole_stored_documents(source: str, stored_points: List[PointStruct], cat):
     run_sync_or_async(populate_hybrid_collection, stored_points, cat)
 
 
