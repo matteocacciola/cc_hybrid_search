@@ -1,10 +1,10 @@
 from typing import Dict
 
-from cat import hook, StrayCat, log, UserMessage, AgentOutput
+from cat import hook, StrayCat, log, UserMessage, AgenticWorkflowOutput, RecallSettings
 import time
 from langchain_core.documents import Document as LangChainDocument
 
-from cat.services.memory.utils import Document, RecallSettings
+from cat.services.memory.models import Document
 from cat.utils import run_sync_or_async
 
 # global variables
@@ -25,7 +25,7 @@ def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
 
 
 @hook(priority=99)
-def agent_fast_reply(fast_reply: AgentOutput, cat: StrayCat) -> AgentOutput:
+def agent_fast_reply(fast_reply: AgenticWorkflowOutput, cat: StrayCat) -> AgenticWorkflowOutput:
     global hybrid_collection_name
 
     user_message: str = cat.working_memory.user_message.text
