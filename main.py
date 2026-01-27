@@ -35,20 +35,10 @@ async def get_memory_points(hybrid_collection_name: str, cat: StrayCat) -> List[
 async def populate_hybrid_collection(hybrid_collection_name: str, stored_points: List[PointStruct], cat: StrayCat):
     global hybrid_collection_names
 
-    points_ids = []
-    points_vectors = []
-    points_payloads = []
-    for p in stored_points:
-        points_ids.append(p.id)
-        points_vectors.append(
-            {"dense": p.vector, "sparse": Document(text=p.payload.get("page_content", ""), model="Qdrant/bm25")}
-        )
-        points_payloads.append(p.payload)
+    if not stored_points:
+        return
 
-    await cat.vector_memory_handler.add_points_to_tenant(
-        collection_name=hybrid_collection_name, payloads=points_payloads, vectors=points_vectors, ids=points_ids
-    )
-
+    await cat.vector_memory_handler.add_points_to_tenant(collection_name=hybrid_collection_name, points=stored_points)
     log.info(f"Added {len(points_ids)} points to hybrid collection")
 
 
