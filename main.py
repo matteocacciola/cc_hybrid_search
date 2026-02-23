@@ -144,4 +144,4 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
                 id=m.id,
             )
         )
-    cat.working_memory.declarative_memories = langchain_documents_from_points
+    cat.working_memory.context_memories = langchain_documents_from_points
