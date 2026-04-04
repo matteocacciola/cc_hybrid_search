@@ -3,8 +3,8 @@ from typing import List
 from langchain_core.documents import Document as LangChainDocument
 
 from cat import hook, StrayCat, log, UserMessage, AgenticWorkflowOutput, RecallSettings, CheshireCat
+from cat.mixins import BotMixin
 from cat.services.memory.models import PointStruct, DocumentRecall
-from cat.services.mixin import BotMixin
 
 # global variables
 hybrid_collection_names = ["declarative_hybrid", "episodic_hybrid"]
@@ -16,7 +16,9 @@ threshold = 0.5
 async def create_hybrid_collection_if_not_exists(collection_name: str, cat: BotMixin):
     dense_vector_name = "dense"
     sparse_vector_name = "sparse"
-    await cat.vector_memory_handler.create_hybrid_collection(collection_name, dense_vector_name, sparse_vector_name)
+
+    vmh = await cat.vector_memory_handler()
+    await vmh.create_hybrid_collection(collection_name, dense_vector_name, sparse_vector_name)
     log.info("Hybrid collection created")
 
 
@@ -28,15 +30,16 @@ async def populate_hybrid_collection(hybrid_collection_name: str, stored_points:
     if not stored_points:
         return
 
-    await cat.vector_memory_handler.add_points_to_tenant(collection_name=hybrid_collection_name, points=stored_points)
+    vmh = await cat.vector_memory_handler()
+    await vmh.add_points_to_tenant(collection_name=hybrid_collection_name, points=stored_points)
     log.info(f"Added {len(stored_points)} points to hybrid collection")
 
 
 @hook(priority=99)
-def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
+async def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
     global k, threshold, k_prefetched
 
-    settings = cat.mad_hatter.get_plugin().load_settings()
+    settings = await cat.mad_hatter.get_plugin().load_settings()
     k = settings["number_of_hybrid_items"]
     k_prefetched = settings["number_of_prefetched_items"]
     threshold = settings["hybrid_threshold"]
@@ -52,10 +55,12 @@ async def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
     if not user_message.startswith("@hybrid"):
         return None
 
+    vmh = await cat.vector_memory_handler()
+
     if user_message == "@hybrid init":
         for hybrid_collection_name in hybrid_collection_names:
             # delete the hybrid collection if it exists
-            await cat.vector_memory_handler.delete_collection(collection_name=hybrid_collection_name)
+            await vmh.delete_collection(collection_name=hybrid_collection_name)
             log.info("Hybrid collection deleted")
             await create_hybrid_collection_if_not_exists(hybrid_collection_name, cat)
 
@@ -63,7 +68,7 @@ async def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
 
     if user_message == "@hybrid migrate":
         for hybrid_collection_name in hybrid_collection_names:
-            points, _ = await cat.vector_memory_handler.get_all_tenant_points(
+            points, _ = await vmh.get_all_tenant_points(
                 collection_name=hybrid_collection_name.replace("_hybrid", ""), with_vectors=True
             )
             points = [PointStruct(id=p.id, vector=p.vector, payload=p.payload) for p in points]
@@ -117,7 +122,7 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
 
     finalized_metadata = config.metadata | metadata if config.metadata else metadata
 
-    client = cat.vector_memory_handler
+    client = await cat.vector_memory_handler()
     memories = []
     for hybrid_collection_name in hybrid_collection_names:
         memories.extend(await client.search_prefetched_in_tenant(
@@ -131,17 +136,14 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
         ))
 
     # convert Qdrant points to langchain.Document
-    langchain_documents_from_points = []
-    for m in memories:
-        langchain_documents_from_points.append(
-            DocumentRecall(
-                document=LangChainDocument(
-                    page_content=m.payload.get("page_content"),
-                    metadata=m.payload.get("metadata") or {},
-                ),
-                score=m.score,
-                vector=m.vector,
-                id=m.id,
-            )
-        )
-    cat.working_memory.context_memories = langchain_documents_from_points
+    cat.working_memory.context_memories = [
+        DocumentRecall(
+            document=LangChainDocument(
+                page_content=m.payload.get("page_content"),
+                metadata=m.payload.get("metadata") or {},
+            ),
+            score=m.score,
+            vector=m.vector,
+            id=m.id,
+        ) for m in memories
+    ]
