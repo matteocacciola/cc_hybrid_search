@@ -17,8 +17,7 @@ async def create_hybrid_collection_if_not_exists(collection_name: str, cat: BotM
     dense_vector_name = "dense"
     sparse_vector_name = "sparse"
 
-    vmh = await cat.vector_memory_handler()
-    await vmh.create_hybrid_collection(collection_name, dense_vector_name, sparse_vector_name)
+    await cat.vector_memory_handler.create_hybrid_collection(collection_name, dense_vector_name, sparse_vector_name)
     log.info("Hybrid collection created")
 
 
@@ -30,8 +29,7 @@ async def populate_hybrid_collection(hybrid_collection_name: str, stored_points:
     if not stored_points:
         return
 
-    vmh = await cat.vector_memory_handler()
-    await vmh.add_points_to_tenant(collection_name=hybrid_collection_name, points=stored_points)
+    await cat.vector_memory_handler.add_points_to_tenant(collection_name=hybrid_collection_name, points=stored_points)
     log.info(f"Added {len(stored_points)} points to hybrid collection")
 
 
@@ -55,12 +53,10 @@ async def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
     if not user_message.startswith("@hybrid"):
         return None
 
-    vmh = await cat.vector_memory_handler()
-
     if user_message == "@hybrid init":
         for hybrid_collection_name in hybrid_collection_names:
             # delete the hybrid collection if it exists
-            await vmh.delete_collection(collection_name=hybrid_collection_name)
+            await cat.vector_memory_handler.delete_collection(collection_name=hybrid_collection_name)
             log.info("Hybrid collection deleted")
             await create_hybrid_collection_if_not_exists(hybrid_collection_name, cat)
 
@@ -68,7 +64,7 @@ async def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
 
     if user_message == "@hybrid migrate":
         for hybrid_collection_name in hybrid_collection_names:
-            points, _ = await vmh.get_all_tenant_points(
+            points, _ = await cat.vector_memory_handler.get_all_tenant_points(
                 collection_name=hybrid_collection_name.replace("_hybrid", ""), with_vectors=True
             )
             points = [PointStruct(id=p.id, vector=p.vector, payload=p.payload) for p in points]
@@ -122,14 +118,13 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
 
     finalized_metadata = config.metadata | metadata if config.metadata else metadata
 
-    client = await cat.vector_memory_handler()
     memories = []
     for hybrid_collection_name in hybrid_collection_names:
-        memories.extend(await client.search_prefetched_in_tenant(
+        memories.extend(await cat.vector_memory_handler.search_prefetched_in_tenant(
             collection_name=hybrid_collection_name,
             query=cat.working_memory.user_message.text,
             query_vector=config.embedding,
-            query_filter=client.filter_from_dict(finalized_metadata),
+            query_filter=cat.vector_memory_handler.filter_from_dict(finalized_metadata),
             k=k,
             k_prefetched=k_prefetched,
             threshold=threshold,
