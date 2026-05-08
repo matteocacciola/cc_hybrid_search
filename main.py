@@ -6,11 +6,7 @@ from cat import hook, StrayCat, log, UserMessage, AgenticWorkflowOutput, RecallS
 from cat.mixins import BotMixin
 from cat.services.memory.models import PointStruct, DocumentRecall
 
-# global variables
 hybrid_collection_names = ["declarative_hybrid", "episodic_hybrid"]
-k = 5
-k_prefetched = 10
-threshold = 0.5
 
 
 async def create_hybrid_collection_if_not_exists(collection_name: str, cat: BotMixin):
@@ -22,7 +18,6 @@ async def create_hybrid_collection_if_not_exists(collection_name: str, cat: BotM
 
 
 async def populate_hybrid_collection(hybrid_collection_name: str, stored_points: List[PointStruct], cat: BotMixin):
-    global hybrid_collection_names
     if hybrid_collection_name not in hybrid_collection_names:
         return
 
@@ -34,21 +29,7 @@ async def populate_hybrid_collection(hybrid_collection_name: str, stored_points:
 
 
 @hook(priority=99)
-async def before_cat_reads_message(user_message: UserMessage, cat) -> UserMessage:
-    global k, threshold, k_prefetched
-
-    settings = await cat.mad_hatter.get_plugin().load_settings()
-    k = settings["number_of_hybrid_items"]
-    k_prefetched = settings["number_of_prefetched_items"]
-    threshold = settings["hybrid_threshold"]
-
-    return user_message
-
-
-@hook(priority=99)
 async def agent_fast_reply(cat: StrayCat) -> AgenticWorkflowOutput | None:
-    global hybrid_collection_names
-
     user_message: str = cat.working_memory.user_message.text
     if not user_message.startswith("@hybrid"):
         return None
@@ -87,24 +68,23 @@ async def after_cat_bootstrap(cat: CheshireCat):
 
 @hook
 async def after_rabbithole_stored_documents(source: str, stored_points: List[PointStruct], cat: BotMixin):
-    global hybrid_collection_names
-
     collection_name = "declarative_hybrid" if isinstance(cat, CheshireCat) else "episodic_hybrid"
     await populate_hybrid_collection(collection_name, stored_points, cat)
 
 
 @hook(priority=99)
-def before_cat_recalls_memories(recall_config: RecallSettings, cat) -> RecallSettings:
-    global k, threshold
-    recall_config.k = k
-    recall_config.threshold = threshold
+async def before_cat_recalls_memories(recall_config: RecallSettings, cat: StrayCat) -> RecallSettings:
+    settings = await cat.plugin_manager.get_plugin().load_settings()
+
+    recall_config.k = settings["number_of_hybrid_items"]
+    recall_config.threshold = settings["hybrid_threshold"]
 
     return recall_config
 
 
 @hook(priority=99)
 async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
-    global hybrid_collection_names, k_prefetched, threshold, k
+    settings = await cat.plugin_manager.get_plugin().load_settings()
 
     user_message: UserMessage = cat.working_memory.user_message
 
@@ -114,7 +94,7 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
         hasattr(cat.working_memory.user_message, "tags")
         and cat.working_memory.user_message.tags
     ):
-        metadata = user_message.tags
+        metadata = user_message.get("tags")
 
     finalized_metadata = config.metadata | metadata if config.metadata else metadata
 
@@ -125,9 +105,9 @@ async def after_cat_recalls_memories(config: RecallSettings, cat) -> None:
             query=cat.working_memory.user_message.text,
             query_vector=config.embedding,
             query_filter=cat.vector_memory_handler.filter_from_dict(finalized_metadata),
-            k=k,
-            k_prefetched=k_prefetched,
-            threshold=threshold,
+            k=settings["number_of_hybrid_items"],
+            k_prefetched=settings["number_of_prefetched_items"],
+            threshold=settings["hybrid_threshold"],
         ))
 
     # convert Qdrant points to langchain.Document
